@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+
 	"github.com/BitofferHub/pkg/middlewares/cache"
 	"github.com/BitofferHub/pkg/middlewares/gormcli"
 	"github.com/BitofferHub/xtimer/internal/biz"
@@ -23,6 +24,7 @@ func (d *Data) InTx(ctx context.Context, fn func(ctx context.Context) error) err
 	})
 }
 
+// 使用事务进行sql的执行
 func (d *Data) DB(ctx context.Context) *gorm.DB {
 	tx, ok := ctx.Value(contextTxKey{}).(*gorm.DB)
 	if ok {

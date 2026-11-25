@@ -35,3 +35,7 @@ func (s *XTimerService) EnableTimer(ctx context.Context, req *pb.EnableTimerRequ
 	}
 	return &pb.EnableTimerReply{Code: 0, Message: "ok"}, nil
 }
+
+func (s *XTimerService) DisableTimer(ctx context.Context, app string, timerID int64) error {
+	return s.timerUC.DisableTimer(ctx, app, timerID)
+}

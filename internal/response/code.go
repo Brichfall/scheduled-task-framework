@@ -11,6 +11,7 @@ var (
 	JsonMarshalError  Code = 9022
 	CreateTimerErr    Code = 9023
 	EnableTimerError  Code = 9024
+	DisableTimerError Code = 9025
 )
 
 var codeMsgDict = map[Code]string{
@@ -20,6 +21,7 @@ var codeMsgDict = map[Code]string{
 	JsonMarshalError:  "json marshal failed",
 	CreateTimerErr:    "create timer failed",
 	EnableTimerError:  "enable timer failed",
+	DisableTimerError: "disable timer failed",
 }
 
 func (c *Code) Message() string {

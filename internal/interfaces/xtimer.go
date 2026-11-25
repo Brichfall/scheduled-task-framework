@@ -64,6 +64,25 @@ func (h *Handler) EnableTimer(c *gin.Context) {
 	return
 }
 
+func (h *Handler) DisableTimer(c *gin.Context) {
+	var req struct {
+		App     string `json:"app" binding:"required"`
+		TimerID int64  `json:"timerId" binding:"gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, response.ParamError, nil)
+		return
+	}
+
+	ctx := context.WithValue(c.Request.Context(), constant.TraceID, c.GetHeader(constant.TraceID))
+	if err := h.xTimerService.DisableTimer(ctx, req.App, req.TimerID); err != nil {
+		log.ErrorContextf(ctx, "DisableTimer err: %v", err)
+		response.Fail(c, response.DisableTimerError, nil)
+		return
+	}
+	response.Success(c, nil)
+}
+
 func (h *Handler) TestCallback(c *gin.Context) {
 	log.Info("callback test: %v", c.Request.Body)
 

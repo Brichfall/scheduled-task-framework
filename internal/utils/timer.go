@@ -47,10 +47,6 @@ func GetSliceMsgKey(t time.Time, bucketID int) string {
 	return fmt.Sprintf("%s_%d", t.Format(constant.MinuteFormat), bucketID)
 }
 
-func GetEnableLockKey(app string) string {
-	return fmt.Sprintf("enable_timer_lock_%s", app)
-}
-
 func GetCreateLockKey(app string) string {
 	return fmt.Sprintf("create_timer_lock_%s", app)
 }

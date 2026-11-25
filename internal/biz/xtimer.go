@@ -5,15 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/BitofferHub/pkg/middlewares/lock"
 	"github.com/BitofferHub/pkg/middlewares/log"
 	"github.com/BitofferHub/xtimer/internal/conf"
 	"github.com/BitofferHub/xtimer/internal/constant"
-	"github.com/BitofferHub/xtimer/internal/utils"
-	context2 "golang.org/x/net/context"
 )
-
-const defaultEnableGapSeconds = 3
 
 // 表定义也需要放在biz层, 还是为了解耦biz与data层
 type Timer struct {
@@ -49,7 +44,7 @@ func (t *Timer) BatchTasksFromTimer(executeTimes []time.Time) []*TimerTask {
 // TimerRepo is a Greater timerRepo.
 type TimerRepo interface {
 	Save(context.Context, *Timer) (*Timer, error)
-	Update(context.Context, *Timer) (*Timer, error)
+	UpdateStatus(ctx context.Context, app string, timerID int64, from, to constant.TimerStatus) (bool, error)
 	FindByID(context.Context, int64) (*Timer, error)
 	FindByStatus(context.Context, int) ([]*Timer, error)
 	Delete(context.Context, int64) error
@@ -74,52 +69,49 @@ func (uc *XtimerUseCase) CreateTimer(ctx context.Context, g *Timer) (*Timer, err
 	return uc.timerRepo.Save(ctx, g)
 }
 
-func (uc *XtimerUseCase) EnableTimer(ctx context.Context, app string, timerId int64) error {
-	// 限制激活和去激活频次
-	locker := lock.NewRedisLock(utils.GetEnableLockKey(app),
-		lock.WithExpireSeconds(defaultEnableGapSeconds),
-		lock.WithWatchDogMode())
-	defer func(locker *lock.RedisLock, ctx context2.Context) {
-		err := locker.Unlock(ctx)
+func (uc *XtimerUseCase) EnableTimer(ctx context.Context, app string, timerID int64) error {
+	return uc.tm.InTx(ctx, func(ctx context.Context) error {
+		updated, err := uc.timerRepo.UpdateStatus(ctx, app, timerID, constant.Unabled, constant.Enabled)
 		if err != nil {
-			log.ErrorContextf(ctx, "EnableTimer 自动解锁失败", err.Error())
+			return fmt.Errorf("激活 Timer %d 失败: %w", timerID, err)
 		}
-	}(locker, ctx)
-	err := locker.Lock(ctx)
-	if err != nil {
-		log.InfoContextf(ctx, "激活/去激活操作过于频繁，请稍后再试！", err.Error())
-		// 抢锁失败, 直接跳过执行, 下一轮
-		return nil
-	}
+		if !updated {
+			return fmt.Errorf("应用 %q 下没有可激活的 Timer %d", app, timerID)
+		}
 
-	// 开启事务
-	uc.tm.InTx(ctx, func(ctx context.Context) error {
-		// 1. 数据库获取Timer
-		timer, err := uc.timerRepo.FindByID(ctx, timerId)
+		timer, err := uc.timerRepo.FindByID(ctx, timerID)
 		if err != nil {
-			log.ErrorContextf(ctx, "激活失败，timer不存在：timerId, err: %v", err)
-			return err
+			return fmt.Errorf("查询 Timer %d 失败: %w", timerID, err)
 		}
 
-		// 2. 校验状态
-		if timer.Status != constant.Unabled.ToInt() {
-			return fmt.Errorf("Timer非Unable状态，激活失败，timerId:: %d", timerId)
-		}
-
-		// 修改timer为激活状态
-		timer.Status = constant.Enabled.ToInt()
-		_, err = uc.timerRepo.Update(ctx, timer)
-		if err != nil {
-			log.ErrorContextf(ctx, "激活失败，timer不存在：timerId, err: %v", err)
-			return err
-		}
-
-		// 迁移数据
+		// 迁移数据，这里的迁移只涉及到对应的一个timer
 		if err := uc.muc.MigratorTimer(ctx, timer); err != nil {
 			log.ErrorContextf(ctx, "迁移timer失败: %v", err)
 			return err
 		}
 		return nil
 	})
-	return nil
+}
+
+func (uc *XtimerUseCase) DisableTimer(ctx context.Context, app string, timerID int64) error {
+	updated, err := uc.timerRepo.UpdateStatus(ctx, app, timerID, constant.Enabled, constant.Unabled)
+	if err != nil {
+		return fmt.Errorf("停用 Timer %d 失败: %w", timerID, err)
+	}
+	if updated {
+		return nil
+	}
+
+	// 已停用的 Timer 重复停用时返回成功。
+	timer, err := uc.timerRepo.FindByID(ctx, timerID)
+	if err != nil {
+		return fmt.Errorf("查询 Timer %d 失败: %w", timerID, err)
+	}
+	if timer.App != app {
+		return fmt.Errorf("Timer %d 不属于应用 %q", timerID, app)
+	}
+	if timer.Status == constant.Unabled.ToInt() {
+		return nil
+	}
+	return fmt.Errorf("Timer %d 的状态未更新", timerID)
 }

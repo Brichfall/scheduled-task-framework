@@ -5,13 +5,14 @@ package interfaces
 import (
 	"bytes"
 	"context"
+	"io/ioutil"
+	"time"
+
 	"github.com/BitofferHub/pkg/constant"
 	engine "github.com/BitofferHub/pkg/middlewares/gin"
 	"github.com/BitofferHub/pkg/middlewares/log"
 	"github.com/BitofferHub/xtimer/internal/service"
 	"github.com/gin-gonic/gin"
-	"io/ioutil"
-	"time"
 )
 
 type Handler struct {
@@ -31,6 +32,7 @@ func NewRouter(h *Handler) *gin.Engine {
 	project := r.Group("xtimer")
 	project.POST("/createTimer", h.CreateTimer)
 	project.GET("/enableTimer", h.EnableTimer)
+	project.POST("/disableTimer", h.DisableTimer)
 	project.POST("/callback", h.TestCallback)
 	return r
 }
